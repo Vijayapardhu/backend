@@ -7,10 +7,29 @@ import { ERROR_CODES } from '../../constants/error-codes';
 import { sendEmail } from '../../services/email.service';
 import { Prisma } from '@prisma/client';
 
-const razorpay = new Razorpay({
-  key_id: config.razorpay.keyId,
-  key_secret: config.razorpay.keySecret,
-});
+const ensureRazorpayCredentials = () => {
+  if (!config.razorpay.keyId || !config.razorpay.keySecret) {
+    const error = new Error(
+      'Razorpay credentials are not configured. Please set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.',
+    );
+    (error as any).code = ERROR_CODES.PAYMENT_FAILED;
+    throw error;
+  }
+};
+
+let razorpayClient: Razorpay | null = null;
+
+const getRazorpayClient = () => {
+  if (!razorpayClient) {
+    ensureRazorpayCredentials();
+    razorpayClient = new Razorpay({
+      key_id: config.razorpay.keyId,
+      key_secret: config.razorpay.keySecret,
+    });
+  }
+
+  return razorpayClient;
+};
 
 export class PaymentsService {
   async createOrder(bookingId: string, userId: string) {
@@ -46,7 +65,7 @@ export class PaymentsService {
 
     const amount = booking.totalAmount.toNumber() * 100;
 
-    const order = await razorpay.orders.create({
+    const order = await getRazorpayClient().orders.create({
       amount,
       currency: 'INR',
       receipt: booking.bookingNumber,
@@ -101,6 +120,7 @@ export class PaymentsService {
     }
 
     const body = data.razorpay_order_id + '|' + data.razorpay_payment_id;
+    ensureRazorpayCredentials();
     const expectedSignature = crypto
       .createHmac('sha256', config.razorpay.keySecret)
       .update(body.toString())
