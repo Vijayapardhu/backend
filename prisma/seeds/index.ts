@@ -27,6 +27,27 @@ async function main() {
   });
   console.log("✅ Admin user created:", admin.email);
 
+  // Create real admin user
+  const realAdminPassword = await hashPassword("HostHaven@Admin");
+  const realAdmin = await prisma.user.upsert({
+    where: { email: "clpprincess29@gmail.com" },
+    update: {
+      passwordHash: realAdminPassword,
+      role: "ADMIN",
+      isVerified: true,
+      emailVerifiedAt: new Date(),
+    },
+    create: {
+      email: "clpprincess29@gmail.com",
+      name: "Super Admin",
+      passwordHash: realAdminPassword,
+      role: "ADMIN",
+      isVerified: true,
+      emailVerifiedAt: new Date(),
+    },
+  });
+  console.log("✅ Real Admin user created:", realAdmin.email);
+
   // Create test user
   const userPassword = await hashPassword("User@123");
   const user = await prisma.user.upsert({
@@ -508,7 +529,7 @@ async function main() {
         userId: user.id,
         propertyId: property.id,
         ...sampleReviews[
-          allProperties.indexOf(property) % sampleReviews.length
+        allProperties.indexOf(property) % sampleReviews.length
         ],
         isVerified: true,
       },
