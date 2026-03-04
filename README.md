@@ -73,6 +73,8 @@ nano .env  # Set all production values (see Environment section below)
 cd docker
 docker compose up -d
 
+# Ensure `CERTBOT_EMAIL` is set (e.g., `CERTBOT_EMAIL=ops@hosthaven.in`) in `.env` and your DNS A or CNAME record points `api.hosthaven.in` to the VPS IP; the built-in nginx + Certbot service will then request and renew the certificate automatically while proxying to the app.
+
 # 5. Run database migrations
 docker compose exec app npx prisma migrate deploy
 
@@ -106,10 +108,12 @@ docker compose up -d
 docker compose exec app npx prisma migrate deploy
 
 # 3b. OR Deploy with PM2
-npm ci --omit=dev
+# Install all dependencies (including dev) so `tsc` is available for building.
+npm ci
 npx prisma generate
 npx prisma migrate deploy
 npm run build
+npm prune --production
 pm2 start ecosystem.config.js --env production
 pm2 save && pm2 startup
 ```
@@ -117,10 +121,10 @@ pm2 save && pm2 startup
 ### Nginx & SSL Setup
 
 ```bash
-# Copy nginx config
+# Copy nginx config if you are terminating HTTPS outside of Docker
 sudo cp nginx/hosthaven.conf /etc/nginx/sites-available/hosthaven
 
-# Edit: replace 'your-domain.com' with your actual domain
+# Domain is already configured for api.hosthaven.in; keep the hostname unless you need to rebrand
 sudo nano /etc/nginx/sites-available/hosthaven
 
 # Enable site
@@ -129,7 +133,7 @@ sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl reload nginx
 
 # Setup SSL (after DNS points to your server)
-sudo certbot --nginx -d your-domain.com -d www.your-domain.com
+sudo certbot --nginx -d api.hosthaven.in
 ```
 
 ### Updating (After Initial Deploy)
@@ -159,6 +163,7 @@ See `.env.example` for all required variables. Key production settings:
 | `FRONTEND_URL` | Your frontend URL (for CORS) |
 | `APP_URL` | Your backend URL |
 | `SMTP_*` | Email configuration |
+| `CERTBOT_EMAIL` | Let’s Encrypt email used by the Docker nginx+Certbot service (required for automated TLS) |
 | `RAZORPAY_*` | Payment gateway keys |
 | `R2_*` | Cloudflare R2 storage credentials |
 

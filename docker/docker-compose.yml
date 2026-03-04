@@ -32,6 +32,32 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  nginx:
+    build:
+      context: ../nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=api.hosthaven.in
+      - CERTBOT_EMAIL=${CERTBOT_EMAIL}
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - certs:/etc/letsencrypt
+      - certbot_lib:/var/lib/letsencrypt
+      - certbot_log:/var/log/letsencrypt
+      - nginx_www:/var/www/certbot
+    networks:
+      - hosthaven-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   db:
     image: postgres:16-alpine
     ports:
@@ -89,6 +115,10 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  certs:
+  certbot_lib:
+  certbot_log:
+  nginx_www:
 
 networks:
   hosthaven-net:
