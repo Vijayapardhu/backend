@@ -1,0 +1,981 @@
+// Prisma Schema for HostHaven
+// This is the initial schema for the database
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  USER
+  VENDOR
+  ADMIN
+}
+
+enum PropertyType {
+  HOTEL
+  HOME
+  TEMPLE
+}
+
+enum City {
+  VIJAYAWADA
+  NANDIYALA
+  VETLAPALEM
+  TIRUPATI
+}
+
+enum PropertyStatus {
+  DRAFT
+  PENDING
+  ACTIVE
+  INACTIVE
+  REJECTED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+  NO_SHOW
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum PaymentMethod {
+  RAZORPAY
+  UPI
+  CARD
+  NETBANKING
+  WALLET
+  CASH
+}
+
+enum ServiceBookingStatus {
+  ADVANCE_PAID
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum PayoutFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+// ============================================
+// USER MANAGEMENT
+// ============================================
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  phone         String?   @unique
+  passwordHash  String?
+  
+  name          String
+  avatarUrl     String?
+  
+  // OAuth
+  googleId      String?   @unique
+  
+  role          UserRole  @default(USER)
+  isActive      Boolean   @default(true)
+  isVerified    Boolean   @default(false)
+  emailVerifiedAt DateTime?
+  emailVerificationToken String?
+  emailVerificationExpires DateTime?
+  passwordResetToken String?
+  passwordResetExpires DateTime?
+  isDeleted     Boolean   @default(false)
+  deletedAt     DateTime?
+  
+  // Security
+  lastLoginAt   DateTime?
+  lastLoginIp   String?
+  failedLoginAttempts Int @default(0)
+  lockedUntil   DateTime?
+  
+  // Relations
+  vendor        Vendor?
+  bookings      Booking[]
+  reviews       Review[]
+  wishlistItems Wishlist[]
+  sessions      Session[]
+  notifications Notification[]
+  serviceBookings ServiceBooking[]
+  supportTickets SupportTicket[]
+  pushSubscriptions UserPushSubscription[]
+  addresses     UserAddress[]
+  adminLogs     AdminLog[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([email])
+  @@index([googleId])
+  @@map("users")
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  refreshToken String   @unique
+  userAgent    String?
+  ipAddress    String?
+  deviceType   String?
+  location     String?
+  expiresAt    DateTime
+  isActive     Boolean  @default(true)
+  
+  createdAt    DateTime @default(now())
+  
+  @@index([userId])
+  @@index([refreshToken])
+  @@map("sessions")
+}
+
+// ============================================
+// VENDOR MANAGEMENT
+// ============================================
+
+model Vendor {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  businessName    String
+  businessAddress String?
+  gstNumber       String?  @unique
+  panNumber       String?
+  aadhaarNumber   String?
+  bankAccount     Json?
+  
+  passportPhoto   String?
+  companyLogo     String?
+  
+  isApproved      Boolean  @default(false)
+  approvedBy      String?
+  approvedAt      DateTime?
+  commissionRate  Decimal  @default(10) @db.Decimal(5, 2)
+  isDeleted      Boolean  @default(false)
+  deletedAt      DateTime?
+  
+  properties      Property[]
+  payouts         Payout[]
+  commissionLedger CommissionLedger[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([isApproved])
+  @@map("vendors")
+}
+
+// ============================================
+// PROPERTY MANAGEMENT
+// ============================================
+
+model Property {
+  id              String         @id @default(uuid())
+  vendorId        String?
+  vendor          Vendor?        @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  
+  type            PropertyType
+  status          PropertyStatus @default(DRAFT)
+  
+  name            String
+  slug            String         @unique
+  description     String         @db.Text
+  shortDesc       String?
+  searchText      String?
+  
+  // Location
+  address         String
+  city            City
+  state           String
+  pincode         String
+  latitude        Decimal?       @db.Decimal(10, 8)
+  longitude       Decimal?       @db.Decimal(11, 8)
+  
+  // Media
+  images          Json           // [{ url, alt, isPrimary }]
+  videos          Json?
+  virtualTourUrl  String?
+  
+  // Features
+  amenities       Json           // ["wifi", "parking", "pool"]
+  highlights      Json?
+  featureFlags    Json?
+  
+  // Pricing (base)
+  basePrice       Decimal        @db.Decimal(10, 2)
+  currency        String         @default("INR")
+  
+  // Stats
+  rating          Decimal        @default(0) @db.Decimal(3, 2)
+  reviewCount     Int            @default(0)
+  bookingCount    Int            @default(0)
+  viewCount       Int            @default(0)
+  
+  // Flags
+  isFeatured      Boolean        @default(false)
+  isVerified      Boolean        @default(false)
+  isDeleted       Boolean        @default(false)
+  deletedAt       DateTime?
+  
+  // SEO
+  metaTitle       String?
+  metaDesc        String?
+  
+  // Relations
+  rooms           Room[]
+  bookings        Booking[]
+  reviews         Review[]
+  templeDetails   TempleDetails?
+  cancellationPolicy CancellationPolicy?
+  
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([type, status])
+  @@index([city, state])
+  @@index([vendorId])
+  @@index([isFeatured])
+  @@index([rating])
+  @@map("properties")
+}
+
+model Room {
+  id              String   @id @default(uuid())
+  propertyId      String
+  property        Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  
+  name            String
+  description     String?
+  type            String   // deluxe, suite, standard
+  
+  capacity        Int      @default(2)
+  extraBedCapacity Int     @default(0)
+  
+  sizeSqm         Decimal? @db.Decimal(6, 2)
+  
+  pricePerNight   Decimal  @db.Decimal(10, 2)
+  weekendPrice    Decimal? @db.Decimal(10, 2)
+  seasonalPricing Json?    // [{ startDate, endDate, price }]
+  
+  amenities       Json
+  images          Json?
+  
+  totalRooms      Int      @default(1)
+  availableRooms  Int      @default(1)
+  
+  isActive        Boolean  @default(true)
+  isDeleted       Boolean  @default(false)
+  deletedAt       DateTime?
+  
+  bookings        Booking[]
+  inventoryLocks  InventoryLock[]
+  inventoryDays   InventoryDay[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([propertyId])
+  @@map("rooms")
+}
+
+model InventoryLock {
+  id             String   @id @default(uuid())
+  roomId         String
+  room           Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId         String?
+  quantity       Int      @default(1)
+  checkInDate    DateTime
+  checkOutDate   DateTime
+  lockUntil      DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([roomId, lockUntil])
+  @@index([roomId, checkInDate, checkOutDate])
+  @@map("inventory_locks")
+}
+
+model InventoryDay {
+  id             String   @id @default(uuid())
+  roomId         String
+  room           Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  date           DateTime
+  totalRooms     Int
+  availableRooms Int
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([roomId, date])
+  @@index([roomId, date])
+  @@map("inventory_days")
+}
+
+model TempleDetails {
+  id              String   @id @default(uuid())
+  propertyId      String   @unique
+  property        Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  
+  deity           String
+  templeType      String?  // shiva, vishnu, etc.
+  builtYear       String?
+  architecture    String?
+  searchText      String?
+  
+  darshanTimings  Json     // [{ day, openTime, closeTime }]
+  aartiTimings    Json?
+  specialEvents   Json?
+  
+  dressCode       String?
+  entryFee        Json?    // [{ type, amount, description }]
+  photography     Boolean  @default(true)
+  
+  bestTimeToVisit String?
+  festivals       Json?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("temple_details")
+}
+
+// ============================================
+// TEMPLE MANAGEMENT (Standalone)
+// ============================================
+
+model Temple {
+  id              String    @id @default(uuid())
+  
+  // Basic Info
+  name            String
+  slug            String    @unique
+  city            City
+  fullAddress     String
+  landmark        String?
+  description     String    @db.Text
+  shortDesc       String?
+  latitude        Float?
+  longitude       Float?
+  deityName       String
+  
+  // Spiritual & Historical
+  templeType      String?
+  builtYear       String?
+  founder         String?
+  mythologicalSignificance String? @db.Text
+  historicalSignificance  String? @db.Text
+  architectureStyle       String?
+  uniqueFeatures         String?
+  sacredNearby          String?
+  associatedLegends      String? @db.Text
+  
+  // Timings
+  darshanTimings  Json      // [{ day, morningOpen, morningClose, eveningOpen, eveningClose }]
+  morningAarti    String?
+  afternoonAarti  String?
+  eveningAarti    String?
+  specialSevas    String?
+  festivalSpecificTimings String?
+  
+  // Entry & Facilities
+  generalEntryFee String?
+  specialDarshanFee String?
+  vipDarshanFee    String?
+  parkingAvailable Boolean @default(false)
+  wheelchairAccessible Boolean @default(false)
+  cloakroomAvailable Boolean @default(false)
+  restroomsAvailable Boolean @default(false)
+  drinkingWaterAvailable Boolean @default(false)
+  prasadamCounterAvailable Boolean @default(false)
+  photographyAllowed Boolean @default(true)
+  mobileRestrictions String?
+  dressCodeMen    String?
+  dressCodeWomen  String?
+  securityNotes   String?
+  
+  // Festivals
+  majorFestivals  String?
+  festivalDates   String?
+  annualBrahmotsavam String?
+  rathotsavamDetails String?
+  crowdExpectationLevel String?
+  specialPoojas   String?
+  specialDecorationDays String?
+  
+  // Best Time
+  bestMonths      String?
+  bestTimeOfDay   String?
+  peakCrowdDays  String?
+  avoidDays       String?
+  weatherConditions String?
+  
+  // Nearby
+  nearbyTemples   String?
+  nearbyBeachesOrHills String?
+  nearbyRestaurants String?
+  nearbyHotels    String?
+  distanceRailwayStation String?
+  distanceBusStand String?
+  distanceAirport String?
+  
+  // Media
+  images          Json      // [{ url, alt, isPrimary }]
+  videos          Json?
+  virtualTourUrl  String?
+  
+  // SEO
+  metaTitle       String?
+  metaDescription String?
+  searchKeywords  String?
+  canonicalUrl    String?
+  openGraphImage  String?
+  structuredDataJsonLd String?
+  
+  // Devotee Experience
+  devoteeTips     String?   @db.Text
+  thingsToCarry   String?
+  thingsNotAllowed String?
+  idealVisitDuration String?
+  suggestedItinerary String? @db.Text
+  localFoodRecommendations String?
+  faqs            Json?
+  
+  // Emergency
+  emergencyContact String?
+  templeOfficePhone String?
+  lostAndFoundDesk String?
+  medicalFacilityNearby String?
+  policeStationNearby String?
+  
+  // Status
+  active          Boolean   @default(true)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([city])
+  @@index([active])
+  @@map("temples")
+}
+
+// ============================================
+// BOOKING MANAGEMENT
+// ============================================
+
+model Booking {
+  id              String        @id @default(uuid())
+  bookingNumber   String        @unique
+  
+  userId          String
+  user            User          @relation(fields: [userId], references: [id])
+  
+  propertyId      String
+  property        Property      @relation(fields: [propertyId], references: [id])
+  
+  roomId          String?
+  room            Room?         @relation(fields: [roomId], references: [id])
+  
+  // Dates
+  checkInDate     DateTime
+  checkOutDate    DateTime
+  
+  // Guests
+  adults          Int           @default(1)
+  children        Int           @default(0)
+  extraBeds       Int           @default(0)
+  
+  // Pricing
+  baseAmount      Decimal       @db.Decimal(10, 2)
+  taxAmount       Decimal       @db.Decimal(10, 2)
+  discountAmount  Decimal       @default(0) @db.Decimal(10, 2)
+  totalAmount     Decimal       @db.Decimal(10, 2)
+  
+  // Status
+  status          BookingStatus @default(PENDING)
+  isDeleted       Boolean       @default(false)
+  deletedAt       DateTime?
+  
+  // Payment
+  payment         Payment?
+  commissionLedger CommissionLedger?
+  
+  // Additional
+  specialRequests String?       @db.Text
+  guestDetails    Json?         // [{ name, age, gender, idProof }]
+  
+  // Vendor tracking
+  vendorNotifiedAt DateTime?
+  vendorConfirmedAt DateTime?
+  
+  // Cancellation
+  cancelledAt     DateTime?
+  cancelledBy     String?
+  cancellationReason String?
+  
+  // Check-in/out
+  actualCheckIn   DateTime?
+  actualCheckOut  DateTime?
+  
+  // Review flag
+  isReviewed      Boolean       @default(false)
+  review          Review?
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([propertyId])
+  @@index([status])
+  @@index([checkInDate, checkOutDate])
+  @@map("bookings")
+}
+
+// ============================================
+// PAYMENT MANAGEMENT
+// ============================================
+
+model Payment {
+  id              String        @id @default(uuid())
+  bookingId       String        @unique
+  booking         Booking       @relation(fields: [bookingId], references: [id])
+  
+  // Razorpay
+  razorpayOrderId String?       @unique
+  razorpayPaymentId String?
+  razorpaySignature String?
+  
+  // Details
+  amount          Decimal       @db.Decimal(10, 2)
+  currency        String        @default("INR")
+  method          PaymentMethod?
+  
+  status          PaymentStatus @default(PENDING)
+  
+  // Metadata
+  receiptUrl      String?
+  invoiceId       String?
+  
+  // Failure
+  errorCode       String?
+  errorDesc       String?
+  
+  // Refund
+  refundId        String?
+  refundedAt      DateTime?
+  refunds         Refund[]
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([status])
+  @@index([razorpayOrderId])
+  @@map("payments")
+}
+
+model Refund {
+  id               String   @id @default(uuid())
+  paymentId        String
+  payment          Payment  @relation(fields: [paymentId], references: [id])
+
+  amount           Decimal  @db.Decimal(10, 2)
+  reason           String?
+  status           String
+
+  razorpayRefundId String?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([paymentId])
+  @@map("refunds")
+}
+
+model Payout {
+  id              String   @id @default(uuid())
+  vendorId        String
+  vendor          Vendor   @relation(fields: [vendorId], references: [id])
+  
+  amount          Decimal  @db.Decimal(10, 2)
+  status          String   @default("pending")
+  
+  bookingIds      Json
+  periodStart     DateTime
+  periodEnd       DateTime
+  
+  processedAt     DateTime?
+  transactionId   String?
+  
+  commissionEntries CommissionLedger[]
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([vendorId])
+  @@map("payouts")
+}
+
+model CommissionLedger {
+  id               String   @id @default(uuid())
+
+  bookingId        String   @unique
+  booking          Booking  @relation(fields: [bookingId], references: [id])
+
+  vendorId         String
+  vendor           Vendor   @relation(fields: [vendorId], references: [id])
+
+  bookingAmount    Decimal  @db.Decimal(10, 2)
+  commissionRate   Decimal  @db.Decimal(5, 2)
+  commissionAmount Decimal  @db.Decimal(10, 2)
+  vendorEarning    Decimal  @db.Decimal(10, 2)
+
+  payoutId         String?
+  payout           Payout?  @relation(fields: [payoutId], references: [id])
+
+  createdAt        DateTime @default(now())
+
+  @@index([vendorId])
+  @@map("commission_ledger")
+}
+
+// ============================================
+// REVIEWS & RATINGS
+// ============================================
+
+model Review {
+  id              String   @id @default(uuid())
+  
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  
+  propertyId      String
+  property        Property @relation(fields: [propertyId], references: [id])
+  
+  bookingId       String?  @unique
+  booking         Booking? @relation(fields: [bookingId], references: [id])
+  
+  // Content
+  rating          Int      // 1-5
+  title           String?
+  comment         String   @db.Text
+  
+  // Categories
+  cleanliness     Int?     @default(5)
+  service         Int?     @default(5)
+  location        Int?     @default(5)
+  value           Int?     @default(5)
+  
+  // Status
+  isVerified      Boolean  @default(false)
+  isVisible       Boolean  @default(true)
+  isDeleted       Boolean  @default(false)
+  deletedAt       DateTime?
+  
+  // Response
+  vendorResponse  String?  @db.Text
+  respondedAt     DateTime?
+  
+  // Images
+  images          Json?
+  videos          Json?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, propertyId])
+  @@index([propertyId])
+  @@index([rating])
+  @@map("reviews")
+}
+
+// ============================================
+// WISHLIST
+// ============================================
+
+model Wishlist {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  itemType    String   // hotel, home, temple
+  itemId      String
+  
+  // Snapshot data
+  itemName    String
+  itemImage   String
+  itemLocation String
+  itemPrice   Decimal? @db.Decimal(10, 2)
+  itemRating  Decimal? @db.Decimal(3, 2)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, itemType, itemId])
+  @@index([userId])
+  @@map("wishlist")
+}
+
+model CancellationPolicy {
+  id                    String   @id @default(uuid())
+
+  propertyId            String   @unique
+  property              Property @relation(fields: [propertyId], references: [id])
+
+  freeBeforeHours       Int
+  refundPercentBefore   Decimal  @db.Decimal(5, 2)
+  refundPercentAfter    Decimal  @db.Decimal(5, 2)
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("cancellation_policies")
+}
+
+// ============================================
+// SERVICES (Travel services)
+// ============================================
+
+model Service {
+  id              String   @id @default(uuid())
+  name            String
+  description     String   @db.Text
+  category        String   // transport, guide, photography, etc.
+  searchText      String?
+  
+  price           Decimal  @db.Decimal(10, 2)
+  priceUnit       String   @default("per_person")
+  
+  advanceType     String   @default("percentage") // percentage or fixed
+  advanceValue    Decimal  @default(30) @db.Decimal(5, 2) // 30% or fixed amount
+  
+  images          Json?
+  duration        String?
+  
+  isActive        Boolean  @default(true)
+  isVerified      Boolean  @default(false)
+  isDeleted       Boolean  @default(false)
+  deletedAt       DateTime?
+  
+  rating          Decimal  @default(0) @db.Decimal(3, 2)
+  reviewCount     Int      @default(0)
+
+  bookings        ServiceBooking[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([category])
+  @@map("services")
+}
+
+model ServiceBooking {
+  id              String               @id @default(uuid())
+  bookingNumber   String               @unique
+
+  userId          String
+  user            User                 @relation(fields: [userId], references: [id])
+
+  serviceId       String?
+  service         Service?             @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+
+  serviceName     String
+  serviceCategory String?
+
+  serviceDate     DateTime
+  serviceTime     String
+  location        String
+  notes           String?              @db.Text
+
+  advanceAmount   Decimal              @db.Decimal(10, 2)
+  totalAmount     Decimal?             @db.Decimal(10, 2)
+  remainingAmount Decimal?             @db.Decimal(10, 2)
+
+  razorpayPaymentId String?
+  razorpayOrderId String?
+
+  status          ServiceBookingStatus @default(ADVANCE_PAID)
+  isDeleted       Boolean              @default(false)
+  deletedAt       DateTime?
+
+  adminContactedAt DateTime?
+  cancelledAt      DateTime?
+  cancellationReason String?
+
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@index([userId])
+  @@index([serviceId])
+  @@index([status])
+  @@index([serviceDate])
+  @@map("service_bookings")
+}
+
+model SupportTicket {
+  id                String            @id @default(uuid())
+  ticketNumber      String            @unique
+
+  userId            String
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  category          String
+  bookingReference  String?
+  message           String            @db.Text
+  attachmentUrl     String?
+
+  status            SupportTicketStatus @default(OPEN)
+  isDeleted         Boolean            @default(false)
+  deletedAt         DateTime?
+
+  adminNotes        String?           @db.Text
+  resolvedAt        DateTime?
+
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@map("support_tickets")
+}
+
+model PlatformSetting {
+  id                 String          @id @default(uuid())
+  platformName       String
+  commissionRate     Decimal         @db.Decimal(5, 2)
+  supportEmail       String
+  supportPhone       String
+  emailNotifications Boolean         @default(true)
+  pushNotifications  Boolean         @default(true)
+  minPayoutAmount    Decimal         @db.Decimal(10, 2)
+  payoutFrequency    PayoutFrequency @default(WEEKLY)
+  emailTemplates     Json?
+  featureFlags       Json?
+  homepageConfig     Json?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@map("platform_settings")
+}
+
+model AdminLog {
+  id        String   @id @default(uuid())
+
+  adminId   String
+  admin     User     @relation(fields: [adminId], references: [id])
+
+  action    String
+  entity    String
+  entityId  String
+  meta      Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([adminId])
+  @@map("admin_logs")
+}
+
+// ============================================
+// NOTIFICATIONS
+// ============================================
+
+model Notification {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  type        String   // booking_confirmed, payment_received, etc.
+  title       String
+  message     String   @db.Text
+  data        Json?
+  
+  isRead      Boolean  @default(false)
+  readAt      DateTime?
+  
+  createdAt   DateTime @default(now())
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+// ============================================
+// PUSH SUBSCRIPTIONS
+// ============================================
+
+model UserPushSubscription {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  endpoint    String
+  p256dh      String
+  auth        String
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, endpoint])
+  @@index([userId])
+  @@map("user_push_subscriptions")
+}
+
+model UserAddress {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  label     String
+  address   String
+  city      String
+  state     String
+  pincode   String
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("user_addresses")
+}
+
+model Media {
+  id         String   @id @default(uuid())
+  url        String
+  type       String
+  entityType String
+  entityId   String
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@map("media")
+}
