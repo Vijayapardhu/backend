@@ -4,7 +4,8 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Install build dependencies for native modules (argon2) and OpenSSL
-RUN apk add --no-cache python3 make g++ openssl openssl1.1-compat
+RUN apk add --no-cache python3 make g++ openssl && \
+    apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/community openssl1.1-compat
 
 # Copy package files first for better layer caching
 COPY package*.json ./
@@ -29,7 +30,8 @@ FROM node:20-alpine AS production
 WORKDIR /app
 
 # Install runtime dependencies for native modules (argon2) and OpenSSL
-RUN apk add --no-cache dumb-init openssl openssl1.1-compat
+RUN apk add --no-cache dumb-init openssl && \
+    apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/community openssl1.1-compat
 
 # Create non-root user
 RUN addgroup -g 1001 -S appgroup && \
