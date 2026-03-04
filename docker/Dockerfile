@@ -1,11 +1,12 @@
 # Build stage
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 
 WORKDIR /app
 
 # Install build dependencies for native modules (argon2) and OpenSSL
-RUN apk add --no-cache python3 make g++ openssl && \
-    apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/community openssl1.1-compat
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3 make g++ openssl && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy package files first for better layer caching
 COPY package*.json ./
@@ -25,17 +26,18 @@ COPY src ./src/
 RUN npm run build
 
 # Production stage
-FROM node:20-alpine AS production
+FROM node:20-slim AS production
 
 WORKDIR /app
 
 # Install runtime dependencies for native modules (argon2) and OpenSSL
-RUN apk add --no-cache dumb-init openssl && \
-    apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/community openssl1.1-compat
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends dumb-init openssl wget && \
+    rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
-RUN addgroup -g 1001 -S appgroup && \
-    adduser -S appuser -u 1001 -G appgroup
+RUN groupadd --system appgroup && \
+    useradd --system --gid appgroup --create-home --shell /usr/sbin/nologin appuser
 
 # Copy package files
 COPY package*.json ./
