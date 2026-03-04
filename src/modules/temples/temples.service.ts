@@ -38,6 +38,10 @@ export class TemplesService {
       ];
     }
 
+    const cacheKey = cacheService.keys.propertyList(`temples:${JSON.stringify(filters)}`);
+    const cached = await cacheService.get<any>(cacheKey);
+    if (cached) return cached;
+
     const [temples, total] = await Promise.all([
       prisma.temple.findMany({
         where,
@@ -48,7 +52,7 @@ export class TemplesService {
       prisma.temple.count({ where }),
     ]);
 
-    return {
+    const result = {
       data: temples,
       meta: {
         page,
@@ -57,6 +61,9 @@ export class TemplesService {
         totalPages: Math.ceil(total / limit),
       },
     };
+
+    await cacheService.set(cacheKey, result, cacheService.getTTL().PROPERTY_LIST);
+    return result;
   }
 
   async getById(idOrSlug: string) {

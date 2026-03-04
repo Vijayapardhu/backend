@@ -97,6 +97,13 @@ export class PropertiesService {
       }
     }
 
+    const cacheKey = cacheService.keys.propertyList(JSON.stringify(filters));
+    const cached = await cacheService.get<any>(cacheKey);
+
+    if (cached) {
+      return cached;
+    }
+
     const [properties, total] = await Promise.all([
       prisma.property.findMany({
         where,
@@ -120,7 +127,7 @@ export class PropertiesService {
       prisma.property.count({ where }),
     ]);
 
-    return {
+    const result = {
       properties: properties.map(this.sanitizeProperty),
       meta: {
         page,
@@ -129,12 +136,16 @@ export class PropertiesService {
         totalPages: Math.ceil(total / limit),
       },
     };
+
+    await cacheService.set(cacheKey, result, cacheService.getTTL().PROPERTY_LIST);
+
+    return result;
   }
 
   async getById(id: string) {
     const cacheKey = cacheService.keys.property(id);
     const cached = await cacheService.get<any>(cacheKey);
-    
+
     if (cached) {
       return cached;
     }
@@ -179,7 +190,7 @@ export class PropertiesService {
     });
 
     const result = this.sanitizeProperty(property);
-    
+
     await cacheService.set(cacheKey, result, cacheService.getTTL().PROPERTY_DETAIL);
 
     return result;

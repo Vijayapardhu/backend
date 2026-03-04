@@ -16,3 +16,8 @@ coverage/
 *.swo
 tsconfig.tsbuildinfo
 lint_output.txt
+
+# Database dumps (may contain sensitive data)
+supabase_dump.sql
+supabase_dump_help.txt
+*.dump.sql

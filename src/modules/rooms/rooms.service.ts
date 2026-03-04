@@ -42,6 +42,13 @@ export class RoomsService {
       where.capacity = { gte: filters.capacity };
     }
 
+    const cacheKey = cacheService.keys.propertyList(`rooms:${JSON.stringify(filters)}`);
+    const cached = await cacheService.get<any>(cacheKey);
+
+    if (cached) {
+      return cached;
+    }
+
     const [rooms, total] = await Promise.all([
       prisma.room.findMany({
         where,
@@ -62,7 +69,7 @@ export class RoomsService {
       prisma.room.count({ where }),
     ]);
 
-    return {
+    const result = {
       rooms: rooms.map(this.sanitizeRoom),
       meta: {
         page,
@@ -71,6 +78,10 @@ export class RoomsService {
         totalPages: Math.ceil(total / limit),
       },
     };
+
+    await cacheService.set(cacheKey, result, cacheService.getTTL().PROPERTY_LIST);
+
+    return result;
   }
 
   async getById(id: string) {

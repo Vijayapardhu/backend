@@ -7,6 +7,7 @@ class CacheService {
   private TTL = {
     PROPERTY_DETAIL: 3600,
     PROPERTY_LIST: 300,
+    SHORT_LIST: 120,
     USER_SESSION: 86400,
     SEARCH_RESULTS: 180,
     FEATURED_PROPERTIES: 1800,
@@ -17,6 +18,9 @@ class CacheService {
   keys = {
     property: (id: string) => `${this.prefix}property:${id}`,
     propertyList: (params: string) => `${this.prefix}properties:list:${params}`,
+    userBookings: (userId: string, params: string) => `${this.prefix}bookings:user:${userId}:${params}`,
+    serviceList: (params: string) => `${this.prefix}services:list:${params}`,
+    serviceDetail: (id: string) => `${this.prefix}service:${id}`,
     userSession: (userId: string) => `${this.prefix}session:${userId}`,
     searchResults: (query: string) => `${this.prefix}search:${query}`,
     stateToken: (token: string) => `${this.prefix}state:${token}`,
