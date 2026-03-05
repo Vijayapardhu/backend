@@ -3,8 +3,16 @@ import Redis from 'ioredis';
 import { config } from '../config';
 import { logger } from '../utils/logger.util';
 
+const url = new URL(config.redis.url);
+
 const connection = config.redis.enabled
-  ? new Redis(config.redis.url, { maxRetriesPerRequest: null })
+  ? new Redis({
+    host: url.hostname || '127.0.0.1',
+    port: Number(url.port) || 6379,
+    password: url.password || undefined,
+    family: 4,
+    maxRetriesPerRequest: null
+  })
   : null;
 
 export const emailQueue = config.redis.enabled

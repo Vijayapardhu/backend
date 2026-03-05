@@ -2,11 +2,27 @@ import Redis from 'ioredis';
 import { config } from '../config';
 
 const createRedisClient = () => {
-  return new Redis(config.redis.url, {
+  const url = new URL(config.redis.url);
+
+  const client = new Redis({
+    host: url.hostname || '127.0.0.1',
+    port: Number(url.port) || 6379,
+    password: url.password || undefined,
+    family: 4, // Force IPv4 to avoid ::1 connection issues
     maxRetriesPerRequest: 3,
     retryStrategy: (times: number) => Math.min(times * 100, 3000),
     lazyConnect: true,
   });
+
+  client.on('connect', () => {
+    console.log('Redis connected');
+  });
+
+  client.on('error', (err) => {
+    console.error('Redis error:', err);
+  });
+
+  return client;
 };
 
 const createNoopRedis = () => {
@@ -28,7 +44,7 @@ declare global {
 
 export const redis = config.redis.enabled
   ? globalThis.redis ?? createRedisClient()
-  : createNoopRedis() as any;
+  : (createNoopRedis() as any);
 
 if (config.app.nodeEnv === 'development') {
   globalThis.redis = redis;

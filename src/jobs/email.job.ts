@@ -4,40 +4,48 @@ import { config } from '../config';
 import { logger } from '../utils/logger.util';
 import prisma from '../config/database';
 
+const url = new URL(config.redis.url);
+
 const connection = config.redis.enabled
-  ? new Redis(config.redis.url, { maxRetriesPerRequest: null })
+  ? new Redis({
+    host: url.hostname || '127.0.0.1',
+    port: Number(url.port) || 6379,
+    password: url.password || undefined,
+    family: 4,
+    maxRetriesPerRequest: null
+  })
   : null;
 
 export const emailWorker = config.redis.enabled
   ? new Worker(
-      'email-queue',
-      async (job: Job) => {
-        logger.info({ jobId: job.id, name: job.name }, 'Processing email job');
+    'email-queue',
+    async (job: Job) => {
+      logger.info({ jobId: job.id, name: job.name }, 'Processing email job');
 
-        const { type, data } = job.data;
+      const { type, data } = job.data;
 
-        switch (type) {
-          case 'booking-confirmed':
-            await handleBookingConfirmed(data);
-            break;
-          case 'booking-cancelled':
-            await handleBookingCancelled(data);
-            break;
-          case 'payment-reminder':
-            await handlePaymentReminder(data);
-            break;
-          case 'review-request':
-            await handleReviewRequest(data);
-            break;
-          default:
-            logger.warn({ jobType: type }, 'Unknown email job type');
-        }
-      },
-      {
-        connection: connection as any,
-        concurrency: 5,
+      switch (type) {
+        case 'booking-confirmed':
+          await handleBookingConfirmed(data);
+          break;
+        case 'booking-cancelled':
+          await handleBookingCancelled(data);
+          break;
+        case 'payment-reminder':
+          await handlePaymentReminder(data);
+          break;
+        case 'review-request':
+          await handleReviewRequest(data);
+          break;
+        default:
+          logger.warn({ jobType: type }, 'Unknown email job type');
       }
-    )
+    },
+    {
+      connection: connection as any,
+      concurrency: 5,
+    }
+  )
   : null;
 
 if (emailWorker) {
@@ -52,7 +60,7 @@ if (emailWorker) {
 
 async function handleBookingConfirmed(data: any) {
   const { userEmail, userName, propertyName, checkIn, checkOut, bookingNumber, totalAmount } = data;
-  
+
   const nodemailer = await import('nodemailer');
   const transporter = nodemailer.createTransport({
     host: config.email.host,
@@ -91,7 +99,7 @@ async function handleBookingConfirmed(data: any) {
 
 async function handleBookingCancelled(data: any) {
   const { userEmail, userName, propertyName, bookingNumber } = data;
-  
+
   const nodemailer = await import('nodemailer');
   const transporter = nodemailer.createTransport({
     host: config.email.host,
@@ -123,7 +131,7 @@ async function handleBookingCancelled(data: any) {
 
 async function handlePaymentReminder(data: any) {
   const { userEmail, userName, propertyName, bookingNumber, amount, dueDate } = data;
-  
+
   const nodemailer = await import('nodemailer');
   const transporter = nodemailer.createTransport({
     host: config.email.host,
@@ -160,7 +168,7 @@ async function handlePaymentReminder(data: any) {
 
 async function handleReviewRequest(data: any) {
   const { userEmail, userName, propertyName, bookingNumber } = data;
-  
+
   const nodemailer = await import('nodemailer');
   const transporter = nodemailer.createTransport({
     host: config.email.host,
