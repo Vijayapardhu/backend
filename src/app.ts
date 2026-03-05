@@ -83,11 +83,15 @@ export const buildApp = async () => {
         const allowedOrigins = [
           config.app.frontendUrl,
           process.env.ADMIN_URL || "https://admin.hosthaven.in",
+          "https://hosthaven.in",
+          "https://www.hosthaven.in",
+          "https://api.hosthaven.in"
         ].filter(Boolean);
+
         if (!origin || allowedOrigins.includes(origin)) {
           cb(null, true);
         } else {
-          cb(new Error("Not allowed"), false);
+          cb(new Error("Not allowed by CORS"), false);
         }
       } else {
         // In development, allow all origins

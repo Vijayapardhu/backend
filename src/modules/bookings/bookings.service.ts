@@ -350,7 +350,7 @@ export class BookingsService {
     ]);
 
     const result = {
-      bookings: bookings.map(this.sanitizeBooking),
+      bookings: bookings.map(b => this.sanitizeBooking(b)),
       meta: {
         page,
         limit,
@@ -592,7 +592,7 @@ export class BookingsService {
     ]);
 
     return {
-      bookings: bookings.map(this.sanitizeBooking),
+      bookings: bookings.map(b => this.sanitizeBooking(b)),
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
